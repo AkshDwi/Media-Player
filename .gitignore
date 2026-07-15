@@ -2,3 +2,5 @@
 **/downloads
 **/.venv
 **/__pycache__
+**/.po_token_cache.json
+**/package-lock.json
