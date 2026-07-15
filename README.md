@@ -3,7 +3,7 @@
 ## Mediaflow Player
 Note this one is the main project now
 The read me for the vite thing is in the Mediaflow Player folder and named README.md
-Description: A simple music player that can play music from youtube locally. This app is for web and desktop. It uses vite as the framework, and it uses pytubefix to get the audio for youtube, and localStorage for local storage.
+Description: A simple music player that can play music from youtube locally. This app is for web and desktop. It uses vite as the framework, and it uses yt-dlp to get the audio for youtube, and localStorage for local storage.
 
 ## Aura Player
 Still a WIP but will get less updates than mediaflow, please use electron with mediaflow if you want all rounder suport.
@@ -16,7 +16,7 @@ Description: A simple music player that can play music from youtube locally. Thi
 | Framework | Flutter | Vite |
 | Platform | Android, iOS, Web, Desktop | Electron, Desktop |
 | Storage | NA | localStorage |
-| API | NA | pytubefix |
+| API | NA | yt-dlp |
 | Description | A simple music player that can play music from locally sorced files. This app suports ever platform and that is the main reason flutter was chosen. It uses Flutter as the framework. | A simple music player that can play music from youtube locally. This app is for web and desktop. It uses vite as the framework, pytubefix to get the audio from youtube, and localStorage for local storage. |
 | Notes | The app is very basic and only has a few features. It is a work in progress. | The app is very basic and only has a few features. It is also a work in progress. |
 
