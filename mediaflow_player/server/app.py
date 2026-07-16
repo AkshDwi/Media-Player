@@ -11,8 +11,20 @@ app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, expose_headers=["Content-Range", "Accept-Ranges", "Content-Length"])
 
 SERVER_DIR = os.path.dirname(__file__)
-SETTINGS_PATH = os.path.join(SERVER_DIR, 'settings.json')
-DEFAULT_DOWNLOAD_DIR = os.path.join(SERVER_DIR, 'downloads')
+
+# Downloads/temp live somewhere the user can actually find and browse — their
+# Music folder — instead of a hidden app-data directory or (worse, once
+# packaged) inside the installed app's own read-only/admin-only folder.
+# `os.path.expanduser('~/Music')` resolves correctly on Windows, macOS, and
+# Linux alike (e.g. C:\Users\<you>\Music, ~/Music, ~/Music).
+# MEDIAFLOW_DATA_DIR can still override this if ever needed, but nothing
+# sets it by default anymore — this one default now works everywhere.
+DEFAULT_DATA_DIR = os.path.join(os.path.expanduser('~/Music'), 'mediaflow_player')
+DATA_DIR = os.environ.get('MEDIAFLOW_DATA_DIR') or DEFAULT_DATA_DIR
+os.makedirs(DATA_DIR, exist_ok=True)
+
+SETTINGS_PATH = os.path.join(DATA_DIR, 'settings.json')
+DEFAULT_DOWNLOAD_DIR = os.path.join(DATA_DIR, 'downloads')
 
 
 def load_settings():
@@ -43,7 +55,11 @@ os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 # and deleted again as soon as that song's stream is over. This also sidesteps
 # handing the browser a raw, short-lived googlevideo CDN URL directly. ---
 def temp_dir():
-    d = os.path.join(DOWNLOAD_DIR, 'temp')
+    # Sibling of DOWNLOAD_DIR, not nested inside it — mirrors the same
+    # ".../mediaflow_player/downloads" + ".../mediaflow_player/temp"
+    # structure, and keeps following DOWNLOAD_DIR if the user changes their
+    # download location from Settings.
+    d = os.path.join(os.path.dirname(DOWNLOAD_DIR), 'temp')
     os.makedirs(d, exist_ok=True)
     return d
 
@@ -311,7 +327,7 @@ def library():
     for f in sorted(os.listdir(DOWNLOAD_DIR)):
         full = os.path.join(DOWNLOAD_DIR, f)
         if not os.path.isfile(full) or f.endswith('.json') or f.startswith('.'):
-            continue  # skips the temp/ subfolder along with metadata/hidden files
+            continue  # skips metadata/hidden files (temp/ is a sibling folder now, not nested here)
         video_id, meta = find_meta_by_filename(f)
         files.append({
             "videoId": video_id,

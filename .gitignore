@@ -4,3 +4,11 @@
 **/__pycache__
 **/.po_token_cache.json
 **/package-lock.json
+
+#For electron
+
+**/release/
+**/bin/
+**/dist/
+**/build/
+**/*.spec

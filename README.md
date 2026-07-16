@@ -2,7 +2,7 @@
 
 Description: A simple music player that can play music from youtube locally. This app is for web and desktop. It uses vite as the framework, it uses yt-dlp to get the audio from youtube, and localStorage for local storage.
 
-# How to use
+## How to use
 This one is a multi step process:
 
 ```bash
@@ -20,4 +20,29 @@ npm install
 npm start
 ```
 
+## How to use as a electron app
+For windows just downlode the released app
+```bash
+#If the release dose not work for some reason build from source by running this
+
+#For windows
+cd mediaflow_player
+npm install
+npm audit fix --force
+npm run electron:build:win
+
+#For linux
+cd mediaflow_player
+npm install
+npm audit fix --force
+npm run electron:build:linux
+
+#For macos
+cd mediaflow_player
+npm install
+npm audit fix --force
+npm run electron:build:mac
+```
+### Note
 This one not that simple, but it works. And it's compleatly free unlike apify.
+A mobile verson might come out but it's not easy to do.
