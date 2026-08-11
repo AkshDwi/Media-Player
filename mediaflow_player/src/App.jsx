@@ -7,14 +7,12 @@ import React, { useState, useRef, useEffect } from 'react';
 
 /* ===== Constants ===== */
 const STORAGE_KEY = 'mediaflow_data';
-const CAT_EMOJIS = ['🐱', '🐈', '😺', '😸', '😻', '🐾', '😽', '🙀', '😹', '😼'];
 const SPEED_PRESETS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 const ACCEPT = 'audio/*,video/*,.mkv,.avi,.flv,.wmv,.flac,.ogg,.opus,.aac,.m4a,.aiff,.wma,.alac,.mid,.midi';
 const VIZ_OPTIONS = [
     { key: 'bars', label: 'Bars' },
     { key: 'circular', label: 'Circular' },
     { key: 'waveform', label: 'Wave' },
-    { key: 'particles', label: 'Particles' },
     { key: 'orb', label: 'Orb' },
 ];
 const API_BASE = import.meta.env?.VITE_API_URL || 'http://localhost:3001';
@@ -120,42 +118,15 @@ function Icon({ name, size = 18, style }) {
 }
 
 /* ===== Visualizer (canvas + Web Audio Analyser) ===== */
-function Visualizer({ analyserRef, style, theme, simulated }) {
+function Visualizer({ analyserRef, style, theme }) {
     const canvasRef = useRef(null);
-    const particlesRef = useRef([]);
     const animRef = useRef(null);
 
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
-        const startTime = performance.now();
-
-        // Streamed tracks (YouTube's CDN, no CORS headers) can never be routed
-        // through the Web Audio graph without the browser silencing them — so
-        // there's no real FFT data available for those. Rather than a dead
-        // blank canvas, fake a lively, music-ish signal from layered sine
-        // waves so the visualizer still feels alive while streaming.
-        function fakeFrequencyData(bufLen, t) {
-            const out = new Uint8Array(bufLen);
-            for (let i = 0; i < bufLen; i++) {
-                const f = i / bufLen;
-                const v =
-                    0.5 + 0.25 * Math.sin(t * 1.7 + f * 12) +
-                    0.15 * Math.sin(t * 3.1 + f * 30) +
-                    0.1 * Math.sin(t * 0.6 + f * 4);
-                out[i] = Math.max(0, Math.min(255, Math.round(v * 255 * (1 - f * 0.3))));
-            }
-            return out;
-        }
-        function fakeTimeDomainData(bufLen, t) {
-            const out = new Uint8Array(bufLen);
-            for (let i = 0; i < bufLen; i++) {
-                const v = Math.sin(i / bufLen * Math.PI * 6 + t * 2.2) * 0.3 + Math.sin(t * 0.8) * 0.05;
-                out[i] = Math.max(0, Math.min(255, Math.round(128 + v * 128)));
-            }
-            return out;
-        }
+        const rgb = getComputedStyle(document.documentElement).getPropertyValue('--mf-accent-rgb').trim() || '99, 102, 241';
 
         const draw = () => {
             animRef.current = requestAnimationFrame(draw);
@@ -169,24 +140,12 @@ function Visualizer({ analyserRef, style, theme, simulated }) {
             ctx.clearRect(0, 0, w, h);
 
             const analyser = analyserRef.current;
-            if (!simulated && !analyser) return;
+            if (!analyser) return;
 
-            const bufLen = simulated ? 512 : analyser.frequencyBinCount;
+            const bufLen = analyser.frequencyBinCount;
             const data = new Uint8Array(bufLen);
-            const rgb = theme === 'dark' ? '129, 140, 248' : '99, 102, 241';
-            const t = (performance.now() - startTime) / 1000;
-
-            // Small shim so the existing style code below can call these as if
-            // they were the real AnalyserNode methods, whether we're simulating
-            // or not.
-            const getByteFrequencyData = target => {
-                if (simulated) target.set(fakeFrequencyData(bufLen, t));
-                else analyser.getByteFrequencyData(target);
-            };
-            const getByteTimeDomainData = target => {
-                if (simulated) target.set(fakeTimeDomainData(bufLen, t));
-                else analyser.getByteTimeDomainData(target);
-            };
+            const getByteFrequencyData = target => analyser.getByteFrequencyData(target);
+            const getByteTimeDomainData = target => analyser.getByteTimeDomainData(target);
 
             if (style === 'bars') {
                 getByteFrequencyData(data);
@@ -244,32 +203,6 @@ function Visualizer({ analyserRef, style, theme, simulated }) {
                 ctx.lineTo(w, h / 2);
                 ctx.stroke();
                 ctx.shadowBlur = 0;
-            } else if (style === 'particles') {
-                getByteFrequencyData(data);
-                const avg = data.reduce((a, b) => a + b, 0) / data.length;
-                const intensity = avg / 255;
-                if (intensity > 0.1 && particlesRef.current.length < 200) {
-                    for (let i = 0; i < Math.floor(intensity * 5); i++) {
-                        particlesRef.current.push({
-                            x: w / 2 + (Math.random() - 0.5) * 40,
-                            y: h / 2 + (Math.random() - 0.5) * 40,
-                            vx: (Math.random() - 0.5) * intensity * 6,
-                            vy: (Math.random() - 0.5) * intensity * 6,
-                            life: 1,
-                            size: 1 + Math.random() * 3,
-                        });
-                    }
-                }
-                particlesRef.current = particlesRef.current.filter(p => {
-                    p.x += p.vx; p.y += p.vy; p.life -= 0.015;
-                    p.vx *= 0.99; p.vy *= 0.99;
-                    if (p.life <= 0) return false;
-                    ctx.beginPath();
-                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-                    ctx.fillStyle = `rgba(${rgb}, ${p.life * 0.8})`;
-                    ctx.fill();
-                    return true;
-                });
             } else if (style === 'orb') {
                 getByteFrequencyData(data);
                 const cx = w / 2, cy = h / 2;
@@ -313,13 +246,13 @@ function Visualizer({ analyserRef, style, theme, simulated }) {
 
         draw();
         return () => cancelAnimationFrame(animRef.current);
-    }, [style, theme, analyserRef, simulated]);
+    }, [style, theme, analyserRef]);
 
     return <canvas ref={canvasRef} className="mf-visualizer" />;
 }
 
 /* ===== Album / Artist track browser (shared between the two) ===== */
-function AlbumOrArtistDetail({ item, kind, tracks, onBack, onDownloadAll, bulkDownloading, bulkProgress, downloadingId, downloadedIds, streamingId, currentTrack, onPlay, onDownload }) {
+function AlbumOrArtistDetail({ item, kind, tracks, onBack, onDownloadAll, bulkDownloading, bulkProgress, downloadingId, downloadedIds, streamingId, currentTrack, onPlay, onDownload, onArtistClick, onShowMore, showMoreAvailable, expandingMore }) {
     const title = kind === 'album' ? item.title : item.name;
     const subtitle = kind === 'album' ? `${item.artist}${item.year ? ` · ${item.year}` : ''}` : `${tracks?.length || 0} songs`;
     return (
@@ -352,7 +285,12 @@ function AlbumOrArtistDetail({ item, kind, tracks, onBack, onDownloadAll, bulkDo
                         <div key={t.id} className="mf-search-result">
                             <div className="mf-search-meta">
                                 <span className="mf-truncate mf-search-title">{t.title}</span>
-                                <span className="mf-search-sub mf-truncate">{t.channel}{t.duration ? ` · ${t.duration}` : ''}</span>
+                                <span className="mf-search-sub mf-truncate">
+                                    {kind === 'artist' || !onArtistClick ? t.channel : (
+                                        <span className="mf-artist-link" onClick={e => { e.stopPropagation(); onArtistClick(t); }}>{t.channel}</span>
+                                    )}
+                                    {t.duration ? ` · ${t.duration}` : ''}
+                                </span>
                             </div>
                             <button className={`mf-btn-icon ${isPlayingThis ? 'mf-btn--accent' : ''}`} onClick={() => onPlay(t)} disabled={isStreaming} title={isPlayingThis ? 'Playing' : 'Play without downloading'}>
                                 <Icon name={isStreaming ? 'spinner' : isPlayingThis ? 'pause' : 'play'} size={16} />
@@ -364,33 +302,12 @@ function AlbumOrArtistDetail({ item, kind, tracks, onBack, onDownloadAll, bulkDo
                     );
                 })
             )}
-        </div>
-    );
-}
-
-/* ===== Cats Easter Egg ===== */
-function CatsOverlay({ active }) {
-    const [cats, setCats] = useState([]);
-
-    useEffect(() => {
-        if (!active) { setCats([]); return; }
-        const spawn = () => {
-            const id = uid();
-            const cat = { id, emoji: CAT_EMOJIS[Math.floor(Math.random() * CAT_EMOJIS.length)], x: 5 + Math.random() * 85, y: 5 + Math.random() * 85, size: 20 + Math.random() * 24 };
-            setCats(prev => [...prev.slice(-6), cat]);
-            setTimeout(() => setCats(prev => prev.filter(c => c.id !== id)), 3000 + Math.random() * 2000);
-        };
-        const interval = setInterval(spawn, 4000 + Math.random() * 4000);
-        spawn();
-        return () => clearInterval(interval);
-    }, [active]);
-
-    if (!active) return null;
-    return (
-        <div className="mf-cats-overlay">
-            {cats.map(cat => (
-                <span key={cat.id} className="mf-cat" style={{ left: `${cat.x}%`, top: `${cat.y}%`, fontSize: `${cat.size}px` }}>{cat.emoji}</span>
-            ))}
+            {kind === 'artist' && showMoreAvailable && (
+                <button className="mf-btn mf-show-more-btn" onClick={onShowMore} disabled={expandingMore}>
+                    <Icon name={expandingMore ? 'spinner' : 'chevronRight'} size={13} style={expandingMore ? {} : { transform: 'rotate(90deg)' }} />
+                    {expandingMore ? 'Loading more…' : 'Show more songs'}
+                </button>
+            )}
         </div>
     );
 }
@@ -424,7 +341,6 @@ export default function Home() {
     const [activePlaylistId, setActivePlaylistId] = useState(null);
     const [theme, setTheme] = useState(localStorage.getItem('player-theme') || 'dark');
     const [visualizerStyle, setVisualizerStyle] = useState('bars');
-    const [catsMode, setCatsMode] = useState(localStorage.getItem('cats-mode') === 'true');
     const [sidePanel, setSidePanel] = useState(null);
     const [editingId, setEditingId] = useState(null);
     const [editName, setEditName] = useState('');
@@ -437,6 +353,7 @@ export default function Home() {
     const [openAlbum, setOpenAlbum] = useState(null); // { id, title, artist, thumbnail, tracks }
     const [openArtist, setOpenArtist] = useState(null); // { id, name, thumbnail, songs }
     const [loadingDetail, setLoadingDetail] = useState(false);
+    const [expandingArtist, setExpandingArtist] = useState(false);
     const [bulkDownloading, setBulkDownloading] = useState(false);
     const [bulkProgress, setBulkProgress] = useState(null); // { done, total }
     const [isSearching, setIsSearching] = useState(false);
@@ -468,7 +385,6 @@ export default function Home() {
 
     // --- Refs ---
     const mediaRef = useRef(null);
-    const streamRef = useRef(null);
     const audioCtxRef = useRef(null);
     const analyserRef = useRef(null);
     const gainRef = useRef(null);
@@ -480,12 +396,11 @@ export default function Home() {
     const activePlaylistIdRef = useRef(null);
     const autoplayHistoryRef = useRef(new Set());
 
-    // Streamed tracks play on a separate <audio> element that's never wired
-    // into the Web Audio graph, so cross-origin CDN audio (no CORS headers)
-    // isn't silenced by the browser.
-    function activeEl() { return currentTrack?.streamed ? streamRef.current : mediaRef.current; }
-
     // --- Initialize Web Audio API (called on first user interaction) ---
+    // Streamed tracks route through here too now: /api/stream downloads to a
+    // temp file served by our own Flask server (CORS-enabled, same as
+    // downloads), so there's no cross-origin taint issue like there'd be
+    // pulling audio straight from YouTube's CDN — real analyser data works fine.
     function initAudio() {
         if (audioCtxRef.current || !mediaRef.current) return;
         try {
@@ -506,23 +421,23 @@ export default function Home() {
         } catch (e) { console.warn('Audio init failed:', e); }
     }
 
-    // --- Apply pitch & speed to whichever element is active ---
+    // --- Apply pitch & speed ---
     useEffect(() => {
-        [mediaRef.current, streamRef.current].forEach(el => {
-            if (!el) return;
-            const setPP = v => {
-                if ('preservesPitch' in el) el.preservesPitch = v;
-                if ('mozPreservesPitch' in el) el.mozPreservesPitch = v;
-                if ('webkitPreservesPitch' in el) el.webkitPreservesPitch = v;
-            };
-            if (pitch === 1) { el.playbackRate = playbackRate; setPP(true); }
-            else { el.playbackRate = playbackRate * pitch; setPP(false); }
-        });
+        const el = mediaRef.current;
+        if (!el) return;
+        const setPP = v => {
+            if ('preservesPitch' in el) el.preservesPitch = v;
+            if ('mozPreservesPitch' in el) el.mozPreservesPitch = v;
+            if ('webkitPreservesPitch' in el) el.webkitPreservesPitch = v;
+        };
+        if (pitch === 1) { el.playbackRate = playbackRate; setPP(true); }
+        else { el.playbackRate = playbackRate * pitch; setPP(false); }
     }, [playbackRate, pitch]);
 
     // --- Theme ---
     useEffect(() => {
-        document.documentElement.classList.toggle('dark', theme === 'dark');
+        document.documentElement.classList.remove('dark', 'tape-light', 'tape-dark');
+        if (theme !== 'light') document.documentElement.classList.add(theme);
         localStorage.setItem('player-theme', theme);
     }, [theme]);
 
@@ -558,37 +473,34 @@ export default function Home() {
 
     /* --- Playback --- */
     function togglePlay() {
-        const el = activeEl();
+        const el = mediaRef.current;
         if (!el || !currentTrack) return;
-        if (!currentTrack.streamed) {
-            initAudio();
-            if (audioCtxRef.current?.state === 'suspended') audioCtxRef.current.resume();
-        }
+        initAudio();
+        if (audioCtxRef.current?.state === 'suspended') audioCtxRef.current.resume();
         if (isPlaying) el.pause(); else el.play().catch(() => { });
     }
 
     function stop() {
-        const el = activeEl();
+        const el = mediaRef.current;
         if (!el) return;
         el.pause(); el.currentTime = 0;
         setIsPlaying(false); setCurrentTime(0);
     }
 
     function seek(t) {
-        const el = activeEl();
+        const el = mediaRef.current;
         if (!el) return;
         el.currentTime = t; setCurrentTime(t);
     }
 
     function skip(sec) {
-        const el = activeEl();
+        const el = mediaRef.current;
         if (!el) return;
         el.currentTime = Math.max(0, Math.min(el.currentTime + sec, el.duration || 0));
     }
 
     function changeVolume(vol) {
         setVolume(vol); setIsMuted(vol === 0); prevVolumeRef.current = vol;
-        if (currentTrack?.streamed) { if (streamRef.current) streamRef.current.volume = Math.min(vol, 1); return; }
         if (gainRef.current) gainRef.current.gain.value = vol;
         else if (mediaRef.current) mediaRef.current.volume = Math.min(vol, 1);
     }
@@ -597,8 +509,7 @@ export default function Home() {
         if (isMuted) { changeVolume(prevVolumeRef.current || 1); setIsMuted(false); }
         else {
             prevVolumeRef.current = volume; setIsMuted(true);
-            if (currentTrack?.streamed) { if (streamRef.current) streamRef.current.volume = 0; }
-            else if (gainRef.current) gainRef.current.gain.value = 0;
+            if (gainRef.current) gainRef.current.gain.value = 0;
             else if (mediaRef.current) mediaRef.current.volume = 0;
         }
     }
@@ -606,10 +517,8 @@ export default function Home() {
     function playTrackAt(index, list) {
         const track = list[index];
         if (!track || !track.url) return;
-        // Switching from a stream back to a downloaded/local track — stop the
-        // stream element and clean up its temp file server-side.
-        if (streamRef.current) { streamRef.current.pause(); streamRef.current.src = ''; }
-        if (currentTrack?.streamed && currentTrack.videoId) endStream(currentTrack.videoId);
+        // Switching away from a stream — clean up its temp file server-side.
+        if (currentTrack?.streamed && currentTrack.videoId && currentTrack.videoId !== track.videoId) endStream(currentTrack.videoId);
         initAudio();
         if (audioCtxRef.current?.state === 'suspended') audioCtxRef.current.resume();
         const el = mediaRef.current;
@@ -633,7 +542,7 @@ export default function Home() {
 
     function playPrev() {
         if (playlist.length === 0) return;
-        const el = activeEl();
+        const el = mediaRef.current;
         if (el && el.currentTime > 3) { el.currentTime = 0; return; }
         let prev;
         if (shuffle) prev = Math.floor(Math.random() * playlist.length);
@@ -653,7 +562,7 @@ export default function Home() {
     }
 
     function handleEnded() {
-        if (loopMode === 'one') { seek(0); activeEl()?.play().catch(() => { }); }
+        if (loopMode === 'one') { seek(0); mediaRef.current?.play().catch(() => { }); }
         else if (currentTrack?.streamed && autoplaySimilar && relatedQueue.length) {
             if (currentTrack.videoId) endStream(currentTrack.videoId);
             // Defensive re-check: skip anything already played in this chain
@@ -924,6 +833,66 @@ export default function Home() {
         }
     }
 
+    // Jump from a track's artist name (in search results, up-next, or an
+    // album's tracklist) straight to that artist's page in the Artists tab.
+    async function goToArtist(track) {
+        if (!track?.channel && !track?.artistId) return;
+        setSidePanel('search');
+        setSearchMode('artists');
+        setOpenAlbum(null);
+        if (track.artistId) {
+            openArtistDetail({ id: track.artistId, name: track.channel, thumbnail: null });
+            return;
+        }
+        // No artistId on this track (some result shapes don't carry one) —
+        // fall back to searching for the artist by name and opening the first match.
+        setLoadingDetail(true);
+        setSearchError(null);
+        try {
+            const res = await fetch(`${API_BASE}/api/search/artists?q=${encodeURIComponent(track.channel)}`);
+            const data = await res.json();
+            const match = (data.results || [])[0];
+            if (match) await openArtistDetail(match);
+            else setSearchError(`Could not find an artist page for "${track.channel}"`);
+        } catch {
+            setSearchError('Could not look up that artist');
+        } finally {
+            setLoadingDetail(false);
+        }
+    }
+
+    // YouTube Music's getArtist() only returns a small curated "Top Songs"
+    // list (~5) — pull the rest by fetching full tracklists from this
+    // artist's albums/singles (already have their IDs from openArtistDetail)
+    // and merging in anything not already shown.
+    async function expandArtistSongs() {
+        if (!openArtist || expandingArtist || openArtist.expanded) return;
+        const releases = [...(openArtist.albums || []), ...(openArtist.singles || [])].slice(0, 12);
+        if (!releases.length) return;
+        setExpandingArtist(true);
+        try {
+            const results = await Promise.all(releases.map(async r => {
+                try {
+                    const res = await fetch(`${API_BASE}/api/album/${encodeURIComponent(r.id)}`);
+                    const data = await res.json();
+                    return res.ok ? (data.tracks || []) : [];
+                } catch { return []; }
+            }));
+            const seen = new Set((openArtist.songs || []).map(s => s.id));
+            const extra = [];
+            for (const trackList of results) {
+                for (const t of trackList) {
+                    if (t.id && !seen.has(t.id)) { seen.add(t.id); extra.push(t); }
+                }
+            }
+            setOpenArtist(prev => prev ? { ...prev, songs: [...(prev.songs || []), ...extra], expanded: true } : prev);
+        } catch (err) {
+            setSearchError('Could not load more songs right now.');
+        } finally {
+            setExpandingArtist(false);
+        }
+    }
+
     // Downloads a whole album (or an artist's listed songs), one track at a
     // time so the server + this UI don't get hammered all at once.
     async function downloadAllTracks(tracks) {
@@ -960,7 +929,7 @@ export default function Home() {
             await refreshAutoImport();
 
             if (activePlaylistId && activePlaylistId !== AUTO_PLAYLIST_ID) {
-                const track = { id: data.videoId || uid(), videoId: data.videoId || null, name: data.title || result.title, type: 'audio', url: data.audioUrl, source: 'youtube', lyrics: data.lyrics || '' };
+                const track = { id: data.videoId || uid(), videoId: data.videoId || null, name: data.title || result.title, thumbnail: result.thumbnail || null, artistId: result.artistId || null, type: 'audio', url: data.audioUrl, source: 'youtube', lyrics: data.lyrics || '' };
                 const updated = [...playlist, track];
                 setPlaylist(updated);
                 updatePlaylistData(activePlaylistId, { tracks: updated });
@@ -999,16 +968,21 @@ export default function Home() {
                 videoId: data.videoId || null,
                 name: data.title || result.title,
                 channel: result.channel,
+                artistId: result.artistId || null,
+                thumbnail: result.thumbnail || null,
                 sourceUrl: result.url,
                 type: 'audio',
                 url: data.audioUrl,
                 streamed: true, // no local file → no id/json → lyrics can't be attached (Feature 4)
             };
             if (track.videoId) autoplayHistoryRef.current.add(track.videoId);
-            // Pause any downloaded/local playback on the Web-Audio-connected element,
-            // then play this one on the separate, CORS-free stream element.
-            if (mediaRef.current) mediaRef.current.pause();
-            const el = streamRef.current;
+            // The temp file /api/stream just made is served by our own Flask
+            // server with proper CORS headers — exactly like a download — so
+            // this can go through the normal Web Audio graph for real
+            // analyser data, same as any other track.
+            initAudio();
+            if (audioCtxRef.current?.state === 'suspended') audioCtxRef.current.resume();
+            const el = mediaRef.current;
             if (el) { el.src = track.url; el.load(); el.play().catch(() => { }); }
             setCurrentTrack(track); setCurrentIndex(-1);
             setIsPlaying(true); setCurrentTime(0); setDuration(0);
@@ -1118,7 +1092,6 @@ export default function Home() {
             if (isAutoPlaylistActive) setPlaylist([]);
             if (currentTrack?.videoId) {
                 if (mediaRef.current) { mediaRef.current.pause(); mediaRef.current.src = ''; }
-                if (streamRef.current) { streamRef.current.pause(); streamRef.current.src = ''; }
                 setCurrentTrack(null); setCurrentIndex(-1); setIsPlaying(false);
             }
             setDirStatus({ ok: true, msg: `Cleared ${data.removedDownloads} download(s) and ${data.removedTemp} temp file(s).` });
@@ -1138,7 +1111,12 @@ export default function Home() {
     // --- Derived ---
     const isVideoFile = currentTrack?.type?.startsWith('video');
     const showVideo = isVideoFile && !audioOnly && currentTrack;
-    const showVisualizer = currentTrack && (!isVideoFile || audioOnly);
+    // Visualizer shows whenever actual video isn't playing — including Audio
+    // Only mode, which just means "no video", not "no analysis" anymore.
+    const showVisualizer = currentTrack && !showVideo;
+    // The track's thumbnail (from search results) sits behind the visualizer
+    // when available — except in Audio Only mode, which is visualizer-only.
+    const showThumbnail = currentTrack && !showVideo && !audioOnly && !!currentTrack.thumbnail;
     const activePL = activePlaylistId === AUTO_PLAYLIST_ID
         ? { id: AUTO_PLAYLIST_ID, name: 'Auto Import' }
         : playlists.find(p => p.id === activePlaylistId);
@@ -1147,7 +1125,6 @@ export default function Home() {
     // --- Render ---
     return (
         <div className="mf-app">
-            <CatsOverlay active={catsMode} />
 
             {/* Sidebar */}
             {sidePanel && (
@@ -1242,6 +1219,7 @@ export default function Home() {
                                                     currentTrack={currentTrack}
                                                     onPlay={playStreamed}
                                                     onDownload={handleDownloadResult}
+                                                    onArtistClick={goToArtist}
                                                 />
                                             ) : albumResults.length === 0 ? (
                                                 <div className="mf-empty-state">
@@ -1277,6 +1255,10 @@ export default function Home() {
                                                     currentTrack={currentTrack}
                                                     onPlay={playStreamed}
                                                     onDownload={handleDownloadResult}
+                                                    onArtistClick={goToArtist}
+                                                    onShowMore={expandArtistSongs}
+                                                    showMoreAvailable={!openArtist.expanded && ((openArtist.albums?.length || 0) + (openArtist.singles?.length || 0)) > 0}
+                                                    expandingMore={expandingArtist}
                                                 />
                                             ) : artistResults.length === 0 ? (
                                                 <div className="mf-empty-state">
@@ -1316,7 +1298,10 @@ export default function Home() {
                                                         )}
                                                         <div className="mf-search-meta">
                                                             <span className="mf-truncate mf-search-title">{result.title}</span>
-                                                            <span className="mf-search-sub mf-truncate">{result.channel}{result.duration ? ` · ${result.duration}` : ''}</span>
+                                                            <span className="mf-search-sub mf-truncate">
+                                                                <span className="mf-artist-link" onClick={e => { e.stopPropagation(); goToArtist(result); }}>{result.channel}</span>
+                                                                {result.duration ? ` · ${result.duration}` : ''}
+                                                            </span>
                                                         </div>
                                                         {/* Feature 4/8: play instantly without saving a file */}
                                                         <button
@@ -1347,7 +1332,9 @@ export default function Home() {
                                                     relatedQueue.slice(0, 5).map(r => (
                                                         <div key={r.id} className="mf-search-result mf-related-item">
                                                             <span className="mf-truncate mf-search-title">{r.title}</span>
-                                                            <span className="mf-search-sub mf-truncate">{r.channel}</span>
+                                                            <span className="mf-search-sub mf-truncate">
+                                                                <span className="mf-artist-link" onClick={e => { e.stopPropagation(); goToArtist(r); }}>{r.channel}</span>
+                                                            </span>
                                                         </div>
                                                     ))
                                                 )}
@@ -1503,12 +1490,23 @@ export default function Home() {
                                         </button>
                                     </div>
 
-                                    <div className="mf-setting-row">
+                                    <div className="mf-setting-row mf-theme-row">
                                         <div className="mf-setting-label">
-                                            <Icon name={theme === 'dark' ? 'moon' : 'sun'} size={16} />
-                                            <span>Dark Mode</span>
+                                            <Icon name={theme === 'dark' ? 'moon' : theme.startsWith('tape') ? 'disc' : 'sun'} size={16} />
+                                            <span>Theme</span>
                                         </div>
-                                        <Toggle on={theme === 'dark'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
+                                        <div className="mf-theme-picker">
+                                            {[['light', 'sun', 'Light'], ['dark', 'moon', 'Dark'], ['tape-light', 'disc', 'Tape'], ['tape-dark', 'disc', 'Tape Dark']].map(([key, icon, label]) => (
+                                                <button
+                                                    key={key}
+                                                    className={`mf-theme-btn ${theme === key ? 'mf-theme-btn--active' : ''}`}
+                                                    onClick={() => setTheme(key)}
+                                                    title={label}
+                                                >
+                                                    <Icon name={icon} size={14} /> {label}
+                                                </button>
+                                            ))}
+                                        </div>
                                     </div>
 
                                     <div className="mf-setting-row">
@@ -1537,15 +1535,6 @@ export default function Home() {
                                             ))}
                                         </div>
                                     </div>
-
-                                    <div className="mf-setting-row">
-                                        <div className="mf-setting-label">
-                                            <span style={{ fontSize: 18 }}>🐱</span>
-                                            <span>Cats Mode</span>
-                                        </div>
-                                        <Toggle on={catsMode} onClick={() => { const v = !catsMode; setCatsMode(v); localStorage.setItem('cats-mode', String(v)); }} />
-                                    </div>
-                                    {catsMode && <p className="mf-cat-hint">🐱 Meow! Cats will appear randomly.</p>}
                                 </div>
                             )}
                         </div>
@@ -1621,24 +1610,10 @@ export default function Home() {
                             onEnded={handleEnded}
                             playsInline
                         />
-                        {/* Feature 4: dedicated element for CORS-free streamed (not downloaded)
-                            playback — kept out of the Web Audio graph on purpose. */}
-                        <audio
-                            ref={streamRef}
-                            onTimeUpdate={() => { if (currentTrack?.streamed) setCurrentTime(streamRef.current?.currentTime || 0); }}
-                            onDurationChange={() => { if (currentTrack?.streamed) setDuration(streamRef.current?.duration || 0); }}
-                            onPlay={() => setIsPlaying(true)}
-                            onPause={() => setIsPlaying(false)}
-                            onEnded={handleEnded}
-                        />
-                        {showVisualizer && (
-                            <>
-                                <Visualizer analyserRef={analyserRef} style={visualizerStyle} theme={theme} simulated={!!currentTrack?.streamed} />
-                                {currentTrack?.streamed && (
-                                    <p className="mf-viz-sim-note">Simulated — real audio analysis isn't possible for streamed (not downloaded) tracks</p>
-                                )}
-                            </>
+                        {showThumbnail && (
+                            <div className="mf-display-thumb" style={{ backgroundImage: `url(${currentTrack.thumbnail})` }} />
                         )}
+                        {showVisualizer && <Visualizer analyserRef={analyserRef} style={visualizerStyle} theme={theme} />}
                         {!currentTrack && (
                             <div className="mf-empty-display">
                                 <Icon name="music" size={56} />

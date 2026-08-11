@@ -968,27 +968,6 @@
     border-color: rgba(var(--mf-accent-rgb), 0.3);
 }
 
-.mf-cat-hint {
-    font-size: 11px;
-    color: hsl(var(--muted-foreground));
-    font-style: italic;
-    margin: -8px 0 0 28px;
-}
-
-/* ===== Cats Overlay ===== */
-.mf-cats-overlay {
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    z-index: 9999;
-}
-
-.mf-cat {
-    position: absolute;
-    animation: mf-cat-pop 0.4s ease;
-    user-select: none;
-}
-
 /* ===== Utility ===== */
 .mf-hidden {
     display: none;
@@ -1071,18 +1050,6 @@
     to {
         opacity: 1;
         transform: translateY(0);
-    }
-}
-
-@keyframes mf-cat-pop {
-    from {
-        transform: scale(0) rotate(-20deg);
-        opacity: 0;
-    }
-
-    to {
-        transform: scale(1) rotate(0);
-        opacity: 1;
     }
 }
 
@@ -1328,16 +1295,245 @@ svg[data-spin] {
     justify-content: center;
 }
 
-.mf-viz-sim-note {
-    position: absolute;
-    bottom: 8px;
-    left: 50%;
-    transform: translateX(-50%);
-    font-size: 10.5px;
+.mf-artist-link {
+    cursor: pointer;
+    text-decoration: none;
+    border-bottom: 1px dotted transparent;
+    transition: color 0.1s, border-color 0.1s;
+}
+
+.mf-artist-link:hover {
+    color: var(--mf-accent);
+    border-bottom-color: var(--mf-accent);
+}
+
+.mf-show-more-btn {
+    margin: 6px 8px 4px;
+    justify-content: center;
+}
+
+/* ===== Tape Theme — warm, hardware/hi-fi inspired, deliberately NOT the
+   generic indigo-gradient/pill-button "AI app" look. Paper/ink tones (or a
+   dark-tape variant), a burnt-amber accent, monospace numerals, hard edges,
+   offset shadows instead of soft blur. Both variants share the same shape/
+   typography rules below — only the color variables differ. ===== */
+.tape-light {
+    --background: 38 32% 92%;
+    --foreground: 25 25% 14%;
+    --card: 38 28% 88%;
+    --card-foreground: 25 25% 14%;
+    --popover: 38 30% 90%;
+    --popover-foreground: 25 25% 14%;
+    --primary: 25 25% 14%;
+    --primary-foreground: 38 32% 95%;
+    --secondary: 36 22% 82%;
+    --secondary-foreground: 25 25% 14%;
+    --muted: 36 20% 82%;
+    --muted-foreground: 25 15% 38%;
+    --accent: 36 22% 82%;
+    --accent-foreground: 25 25% 14%;
+    --destructive: 6 65% 42%;
+    --destructive-foreground: 38 32% 95%;
+    --border: 30 18% 62%;
+    --input: 30 18% 62%;
+    --ring: 20 70% 40%;
+    --mf-accent: #b8551f;
+    --mf-accent-hover: #96431a;
+    --mf-accent-rgb: 184, 85, 31;
+    --mf-accent-light: rgba(184, 85, 31, 0.14);
+    --mf-track: #cabb9c;
+    --mf-toggle-bg: #b3a284;
+}
+
+.tape-dark {
+    --background: 25 18% 9%;
+    --foreground: 38 28% 88%;
+    --card: 25 16% 13%;
+    --card-foreground: 38 28% 88%;
+    --popover: 25 16% 12%;
+    --popover-foreground: 38 28% 88%;
+    --primary: 38 28% 90%;
+    --primary-foreground: 25 25% 12%;
+    --secondary: 25 14% 18%;
+    --secondary-foreground: 38 28% 88%;
+    --muted: 25 14% 18%;
+    --muted-foreground: 34 16% 62%;
+    --accent: 25 14% 18%;
+    --accent-foreground: 38 28% 88%;
+    --destructive: 6 60% 48%;
+    --destructive-foreground: 38 28% 92%;
+    --border: 28 14% 26%;
+    --input: 28 14% 26%;
+    --ring: 24 80% 52%;
+    --mf-accent: #d9772f;
+    --mf-accent-hover: #e88a45;
+    --mf-accent-rgb: 217, 119, 47;
+    --mf-accent-light: rgba(217, 119, 47, 0.18);
+    --mf-track: #3a3128;
+    --mf-toggle-bg: #4a3f33;
+}
+
+.tape-light,
+.tape-dark {
+    --radius: 0.2rem;
+    --font-heading: 'IBM Plex Mono', 'JetBrains Mono', ui-monospace, 'Courier New', monospace;
+    --font-body: 'IBM Plex Mono', 'JetBrains Mono', ui-monospace, 'Courier New', monospace;
+    --font-display: 'IBM Plex Mono', 'JetBrains Mono', ui-monospace, 'Courier New', monospace;
+    --font-mono: 'IBM Plex Mono', 'JetBrains Mono', ui-monospace, 'Courier New', monospace;
+}
+
+/* Faint paper/surface grain instead of a flat/gradient background — cheap CSS noise, no image asset needed */
+.tape-light .mf-app,
+.tape-dark .mf-app {
+    background-image:
+        repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.015) 0px, transparent 1px, transparent 2px),
+        repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.012) 0px, transparent 1px, transparent 3px);
+}
+
+/* Hard edges, not soft "everything is a pill" shapes */
+.tape-light .mf-tab,
+.tape-dark .mf-tab,
+.tape-light .mf-search-mode-tab,
+.tape-dark .mf-search-mode-tab,
+.tape-light .mf-theme-btn,
+.tape-dark .mf-theme-btn,
+.tape-light .mf-viz-btn,
+.tape-dark .mf-viz-btn,
+.tape-light .mf-btn,
+.tape-dark .mf-btn,
+.tape-light .mf-btn-icon,
+.tape-dark .mf-btn-icon,
+.tape-light .mf-search-dl,
+.tape-dark .mf-search-dl,
+.tape-light .mf-stream-badge,
+.tape-dark .mf-stream-badge,
+.tape-light .mf-count-inline,
+.tape-dark .mf-count-inline,
+.tape-light .mf-track-item,
+.tape-dark .mf-track-item,
+.tape-light .mf-search-result,
+.tape-dark .mf-search-result,
+.tape-light .mf-playlist-item,
+.tape-dark .mf-playlist-item,
+.tape-light .mf-popover,
+.tape-dark .mf-popover,
+.tape-light .mf-display-frame,
+.tape-dark .mf-display-frame,
+.tape-light input,
+.tape-dark input,
+.tape-light textarea,
+.tape-dark textarea {
+    border-radius: 3px !important;
+}
+
+/* Transport-style play button: rounded square, not a perfect circle —
+   more cassette-deck button, less "AI dashboard" pill */
+.tape-light .mf-btn-play,
+.tape-dark .mf-btn-play {
+    border-radius: 6px !important;
+    box-shadow: 3px 3px 0 rgba(var(--mf-accent-rgb), 0.5);
+}
+
+.tape-light .mf-btn-play:active,
+.tape-dark .mf-btn-play:active {
+    box-shadow: 1px 1px 0 rgba(var(--mf-accent-rgb), 0.5);
+    transform: translate(2px, 2px);
+}
+
+/* Offset hard shadows instead of soft blurred ones, on the main surfaces */
+.tape-light .mf-sidebar,
+.tape-dark .mf-sidebar,
+.tape-light .mf-display-frame,
+.tape-dark .mf-display-frame,
+.tape-light .mf-popover,
+.tape-dark .mf-popover {
+    box-shadow: 4px 4px 0 hsl(var(--border));
+    border: 1.5px solid hsl(var(--border));
+}
+
+.tape-light .mf-track-item--active,
+.tape-dark .mf-track-item--active,
+.tape-light .mf-playlist-item--active,
+.tape-dark .mf-playlist-item--active {
+    box-shadow: inset 3px 0 0 var(--mf-accent);
+}
+
+/* Slider: a physical fader look instead of a thin gradient rail */
+.tape-light .mf-slider,
+.tape-dark .mf-slider {
+    height: 6px;
+    border-radius: 3px !important;
+    border: 1px solid hsl(var(--border));
+}
+
+.tape-light .mf-slider::-webkit-slider-thumb,
+.tape-dark .mf-slider::-webkit-slider-thumb {
+    border-radius: 2px !important;
+    width: 10px;
+    height: 18px;
+    box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.3);
+}
+
+.tape-light .mf-toggle,
+.tape-dark .mf-toggle {
+    border-radius: 4px !important;
+    border: 1px solid hsl(var(--border));
+}
+
+.tape-light .mf-toggle-knob,
+.tape-dark .mf-toggle-knob {
+    border-radius: 2px !important;
+}
+
+/* Time readouts feel like an LCD display in this theme */
+.tape-light .mf-time,
+.tape-dark .mf-time {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+}
+
+.mf-theme-row {
+    align-items: center;
+}
+
+.mf-theme-picker {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 4px;
+    max-width: 60%;
+}
+
+.mf-theme-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 9px;
+    font-size: 11.5px;
+    font-weight: 600;
+    border-radius: 7px;
+    border: 1px solid transparent;
+    background: transparent;
     color: hsl(var(--muted-foreground));
-    background: hsl(var(--background) / 0.7);
-    padding: 3px 10px;
-    border-radius: 999px;
-    white-space: nowrap;
-    pointer-events: none;
+    cursor: pointer;
+}
+
+.mf-theme-btn:hover {
+    background: hsl(var(--muted) / 0.5);
+}
+
+.mf-theme-btn--active {
+    background: var(--mf-accent-light);
+    color: var(--mf-accent);
+    border-color: var(--mf-accent);
+}
+
+/* Track thumbnail sitting behind the visualizer */
+.mf-display-thumb {
+    position: absolute;
+    inset: 0;
+    background-size: cover;
+    background-position: center;
+    filter: blur(2px) brightness(0.55);
+    transform: scale(1.08);
 }

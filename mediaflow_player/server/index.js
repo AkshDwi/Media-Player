@@ -24,6 +24,7 @@ function mapSong(s) {
         id: s.videoId,
         title: s.name,
         channel: s.artist?.name || (Array.isArray(s.artists) ? s.artists.map(a => a.name).join(', ') : '') || 'Unknown',
+        artistId: s.artist?.artistId || (Array.isArray(s.artists) ? s.artists[0]?.artistId : null) || null,
         duration: s.duration ? formatDuration(s.duration) : '',
         thumbnail: s.thumbnails?.[s.thumbnails.length - 1]?.url || null,
         url: `https://www.youtube.com/watch?v=${s.videoId}`,
@@ -35,10 +36,12 @@ function mapSong(s) {
 function mapUpNext(s) {
     const videoId = s.videoId || s.id;
     const artists = Array.isArray(s.artists) ? s.artists.map(a => a.name || a).join(', ') : (s.artist?.name || s.artist || '');
+    const artistId = s.artist?.artistId || (Array.isArray(s.artists) ? s.artists[0]?.artistId : null) || null;
     return {
         id: videoId,
         title: s.title || s.name || 'Unknown title',
         channel: artists || 'Unknown',
+        artistId,
         duration: typeof s.duration === 'number' ? formatDuration(s.duration) : (s.duration || ''),
         thumbnail: s.thumbnails?.[s.thumbnails.length - 1]?.url || s.thumbnail || null,
         url: `https://www.youtube.com/watch?v=${videoId}`,
@@ -71,11 +74,13 @@ function mapArtistResult(a) {
     };
 }
 
-function mapAlbumTrack(s, fallbackArtist) {
+function mapAlbumTrack(s, fallbackArtist, fallbackArtistId) {
     return {
         id: s.videoId || s.id,
         title: s.name || s.title,
         channel: s.artist?.name || fallbackArtist || 'Unknown',
+        artistId: s.artist?.artistId || fallbackArtistId || null,
+        thumbnail: pickThumb(s) || null,
         duration: typeof s.duration === 'number' ? formatDuration(s.duration) : (s.duration || ''),
         url: `https://www.youtube.com/watch?v=${s.videoId || s.id}`,
     };
@@ -125,11 +130,13 @@ app.get('/api/album/:albumId', async (req, res) => {
     try {
         const album = await ytmusic.getAlbum(req.params.albumId);
         const artistName = album.artist?.name || (Array.isArray(album.artists) ? album.artists.map(a => a.name).join(', ') : '');
-        const tracks = (album.songs || album.tracks || []).map(s => mapAlbumTrack(s, artistName));
+        const artistId = album.artist?.artistId || null;
+        const tracks = (album.songs || album.tracks || []).map(s => mapAlbumTrack(s, artistName, artistId));
         res.json({
             id: req.params.albumId,
             title: album.name || album.title,
             artist: artistName || 'Unknown',
+            artistId,
             year: album.year || null,
             thumbnail: pickThumb(album),
             tracks,
@@ -145,16 +152,23 @@ app.get('/api/album/:albumId', async (req, res) => {
     }
 });
 
-// --- Top songs for an artist, so their catalog can be browsed/downloaded ---
+// --- Top songs for an artist (YouTube Music's small curated "Top Songs"
+// preview — typically ~5), plus their albums/singles so the frontend can
+// fetch full tracklists on demand ("Show more") instead of being stuck
+// with just that curated handful. ---
 app.get('/api/artist/:artistId', async (req, res) => {
     try {
         const artist = await ytmusic.getArtist(req.params.artistId);
-        const songs = (artist.songs?.results || artist.songs || artist.topSongs || []).map(s => mapAlbumTrack(s, artist.name));
+        const songs = (artist.songs?.results || artist.songs || artist.topSongs || []).map(s => mapAlbumTrack(s, artist.name, req.params.artistId));
+        const albums = (artist.albums?.results || artist.albums || artist.topAlbums || []).map(mapAlbumResult);
+        const singles = (artist.singles?.results || artist.singles || artist.topSingles || []).map(mapAlbumResult);
         res.json({
             id: req.params.artistId,
             name: artist.name || artist.title,
             thumbnail: pickThumb(artist),
             songs,
+            albums,
+            singles,
         });
     } catch (err) {
         console.error('Artist lookup failed (falling back to search):', err?.message || err);
@@ -171,7 +185,9 @@ app.get('/api/artist/:artistId', async (req, res) => {
                 id: req.params.artistId,
                 name: nameGuess,
                 thumbnail: null,
-                songs: songs.slice(0, 15).map(s => mapAlbumTrack(s, nameGuess)),
+                songs: songs.slice(0, 15).map(s => mapAlbumTrack(s, nameGuess, req.params.artistId)),
+                albums: [],
+                singles: [],
                 partial: true, // frontend can note this is a best-effort list
             });
         } catch (fallbackErr) {

@@ -64,26 +64,76 @@ def temp_dir():
     return d
 
 
-# --- yt-dlp download helper, shared by both streaming (temp) and
-# permanent downloads. yt-dlp is far more actively maintained than
-# pytubefix against YouTube's anti-bot changes (SABR, PoTokens, etc.),
-# and doesn't need any manual token setup for the vast majority of videos. ---
+# --- Download engines, tried in order until one works. YouTube regularly
+# breaks one extraction method or another (client blocks, signature changes,
+# SABR/PoToken rollouts, etc.) — rather than the whole app going down when
+# that happens, each engine is a fully independent attempt, so one breaking
+# doesn't take the others with it. yt-dlp is tried first (most actively
+# maintained), across a few different "player clients" it can pretend to be;
+# pytubefix is a genuinely separate codebase used as a last resort, since a
+# bug/block in yt-dlp's extractor is unlikely to affect it too. ---
+try:
+    from pytubefix import YouTube as _PytubefixYouTube
+except ImportError:
+    _PytubefixYouTube = None
+
+
+def _ytdlp_engine(player_client=None):
+    """Returns an engine function that downloads via yt-dlp, optionally
+    pretending to be a specific YouTube client (android/ios/web etc.) —
+    some clients succeed where others get blocked."""
+    def engine(video_id, out_dir):
+        outtmpl = os.path.join(out_dir, f'{video_id}.%(ext)s')
+        opts = {
+            'format': 'bestaudio/best',
+            'outtmpl': outtmpl,
+            'noplaylist': True,
+            'quiet': True,
+            'no_warnings': True,
+            'nocheckcertificate': True,
+        }
+        if player_client:
+            opts['extractor_args'] = {'youtube': {'player_client': [player_client]}}
+        with YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=True)
+        ext = info.get('ext', 'webm')
+        return f"{video_id}.{ext}", (info.get('title') or video_id)
+    return engine
+
+
+def _pytubefix_engine(video_id, out_dir):
+    if _PytubefixYouTube is None:
+        raise RuntimeError('pytubefix is not installed')
+    yt = _PytubefixYouTube(f"https://www.youtube.com/watch?v={video_id}", client="WEB")
+    stream = yt.streams.get_audio_only()
+    if not stream:
+        raise RuntimeError('pytubefix: no audio-only stream found')
+    filename = f"{video_id}.{stream.subtype}"
+    stream.download(output_path=out_dir, filename=filename)
+    return filename, (yt.title or video_id)
+
+
+DOWNLOAD_ENGINES = [
+    ('yt-dlp (default client)', _ytdlp_engine(None)),
+    ('yt-dlp (android client)', _ytdlp_engine('android')),
+    ('yt-dlp (ios client)', _ytdlp_engine('ios')),
+    ('pytubefix', _pytubefix_engine),
+]
+
+
 def ytdlp_download(video_id, out_dir):
     """Downloads the best available audio for video_id into out_dir as
-    '<video_id>.<ext>' and returns (filename, title)."""
-    outtmpl = os.path.join(out_dir, f'{video_id}.%(ext)s')
-    opts = {
-        'format': 'bestaudio/best',
-        'outtmpl': outtmpl,
-        'noplaylist': True,
-        'quiet': True,
-        'no_warnings': True,
-        'nocheckcertificate': True,
-    }
-    with YoutubeDL(opts) as ydl:
-        info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=True)
-    ext = info.get('ext', 'webm')
-    return f"{video_id}.{ext}", (info.get('title') or video_id)
+    '<video_id>.<ext>', trying each engine above in order until one
+    succeeds. Returns (filename, title); raises only if all of them fail."""
+    last_error = None
+    for name, engine in DOWNLOAD_ENGINES:
+        try:
+            return engine(video_id, out_dir)
+        except Exception as e:
+            last_error = e
+            print(f"[download] engine '{name}' failed for {video_id}: {e}")
+            continue
+    raise RuntimeError(f"All download engines failed for this video. Last error: {last_error}")
 
 
 _stream_titles = {}  # video_id -> title, for temp files we've already resolved
@@ -105,9 +155,9 @@ def resolve_and_cache_stream(video_id):
         msg = str(e)
         if 'sign in' in msg.lower() or 'confirm' in msg.lower() or 'bot' in msg.lower():
             raise RuntimeError(
-                "YouTube is blocking this download (bot-check). Try updating yt-dlp "
-                "(`pip install -U yt-dlp`) — it ships fixes for these very frequently — "
-                "or try a different track."
+                "YouTube is blocking this download (bot-check) across every fallback "
+                "engine. Try updating yt-dlp (`pip install -U yt-dlp`) — it ships fixes "
+                "for these very frequently — or try a different track."
             )
         raise RuntimeError(msg)
 
