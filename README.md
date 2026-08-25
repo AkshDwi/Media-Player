@@ -19,6 +19,23 @@ cd mediaflow_player\server
 npm install
 npm start
 ```
+Note to use the file conversion feature install ffmpeg and add it to your path.
+```bash
+#For windows
+winget install ffmpeg
+
+#For debian based linux
+sudo apt install ffmpeg
+
+#For red hat based linux
+sudo dnf install ffmpeg
+
+#For arch based linux
+sudo pacman -S ffmpeg
+
+#For macos
+brew install ffmpeg
+```
 
 ## How to use as a electron app
 For windows just downlode the released app

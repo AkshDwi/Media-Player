@@ -369,6 +369,14 @@ export default function Home() {
     const [dirStatus, setDirStatus] = useState(null);
     const [clearingDownloads, setClearingDownloads] = useState(false);
 
+    // Download audio format (webm/mp3/mp4/wav/m4a/source) + bulk conversion
+    const [audioFormat, setAudioFormat] = useState('source');
+    const [savingFormat, setSavingFormat] = useState(false);
+    const [formatStatus, setFormatStatus] = useState(null);
+    const [ffmpegAvailable, setFfmpegAvailable] = useState(true);
+    const [convertingAll, setConvertingAll] = useState(false);
+    const [convertStatus, setConvertStatus] = useState(null);
+
     // Feature 2: manual lyrics for the current track
     const [lyricsDraft, setLyricsDraft] = useState('');
     const [lyricsSaved, setLyricsSaved] = useState(false);
@@ -766,7 +774,20 @@ export default function Home() {
         }
     }
 
-    useEffect(() => { refreshAutoImport(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    useEffect(() => { refreshAutoImport(); refreshSettings(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    async function refreshSettings() {
+        try {
+            const res = await fetch(`${API_BASE}/api/settings`);
+            if (!res.ok) return;
+            const data = await res.json();
+            if (data.downloadDir) { setDownloadDir(data.downloadDir); setDownloadDirDraft(prev => prev || data.downloadDir); }
+            if (data.audioFormat) setAudioFormat(data.audioFormat);
+            if (typeof data.ffmpegAvailable === 'boolean') setFfmpegAvailable(data.ffmpegAvailable);
+        } catch (err) {
+            console.warn('Could not load settings:', err);
+        }
+    }
 
     function loadAutoPlaylist() {
         setPlaylist(autoTracks);
@@ -1075,6 +1096,53 @@ export default function Home() {
             setDirStatus({ ok: false, msg: err.message || 'Could not update download location' });
         } finally {
             setSavingDir(false);
+        }
+    }
+
+    // Applies to future downloads only — "source" (native, no ffmpeg needed)
+    // or a specific format (webm/mp3/mp4/wav/m4a, needs ffmpeg on the server).
+    async function saveAudioFormat(fmt) {
+        if (savingFormat || fmt === audioFormat) return;
+        setSavingFormat(true);
+        setFormatStatus(null);
+        try {
+            const res = await fetch(`${API_BASE}/api/settings`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ audioFormat: fmt }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Could not update download format');
+            setAudioFormat(data.audioFormat);
+            if (typeof data.ffmpegAvailable === 'boolean') setFfmpegAvailable(data.ffmpegAvailable);
+            setFormatStatus({ ok: true, msg: `New downloads will be saved as .${data.audioFormat === 'source' ? 'whatever YouTube gives (webm/m4a)' : data.audioFormat}.` });
+        } catch (err) {
+            setFormatStatus({ ok: false, msg: err.message || 'Could not update download format' });
+        } finally {
+            setSavingFormat(false);
+        }
+    }
+
+    // Converts every already-downloaded song to whatever audioFormat is
+    // currently set to — the "make my existing library match" button.
+    async function convertAllDownloads() {
+        if (convertingAll || audioFormat === 'source') return;
+        setConvertingAll(true);
+        setConvertStatus(null);
+        try {
+            const res = await fetch(`${API_BASE}/api/library/convert-all`, { method: 'POST' });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Could not convert existing downloads');
+            const failedCount = data.failed?.length || 0;
+            setConvertStatus({
+                ok: failedCount === 0,
+                msg: `Converted ${data.converted}, already ${audioFormat}: ${data.skipped}${failedCount ? `, failed: ${failedCount}` : ''}.`,
+            });
+            refreshAutoImport();
+        } catch (err) {
+            setConvertStatus({ ok: false, msg: err.message || 'Could not convert existing downloads' });
+        } finally {
+            setConvertingAll(false);
         }
     }
 
@@ -1488,6 +1556,39 @@ export default function Home() {
                                         <button className="mf-btn mf-btn-danger" onClick={clearAllDownloads} disabled={clearingDownloads}>
                                             <Icon name={clearingDownloads ? 'spinner' : 'trash'} size={14} /> Clear All Downloads &amp; Temp
                                         </button>
+                                    </div>
+
+                                    {/* Download audio format + bulk conversion of existing library */}
+                                    <div className="mf-setting-section">
+                                        <p className="mf-setting-title"><Icon name="music" size={14} /> Download Format</p>
+                                        <p className="mf-empty-hint">
+                                            Applies to new downloads. "Source" is whatever YouTube naturally gives (webm/m4a) and needs no extra software.
+                                            Any other format requires <strong>ffmpeg</strong> to be installed{!ffmpegAvailable && <span className="mf-search-error" style={{ display: 'inline' }}> — not currently detected on this server.</span>}.
+                                        </p>
+                                        <div className="mf-format-picker">
+                                            {['source', 'webm', 'm4a', 'mp4', 'mp3', 'wav'].map(fmt => (
+                                                <button
+                                                    key={fmt}
+                                                    className={`mf-format-btn ${audioFormat === fmt ? 'mf-format-btn--active' : ''}`}
+                                                    onClick={() => saveAudioFormat(fmt)}
+                                                    disabled={savingFormat}
+                                                >
+                                                    {fmt === 'source' ? 'Source' : `.${fmt}`}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        {formatStatus && <p className={formatStatus.ok ? 'mf-dir-ok' : 'mf-search-error'}>{formatStatus.msg}</p>}
+
+                                        <button
+                                            className="mf-btn mf-btn-primary mf-convert-all-btn"
+                                            onClick={convertAllDownloads}
+                                            disabled={convertingAll || audioFormat === 'source'}
+                                            title={audioFormat === 'source' ? 'Pick a specific format above first' : `Convert every downloaded song to .${audioFormat}`}
+                                        >
+                                            <Icon name={convertingAll ? 'spinner' : 'repeat'} size={14} />
+                                            {convertingAll ? 'Converting…' : `Convert All Existing Downloads to .${audioFormat === 'source' ? '…' : audioFormat}`}
+                                        </button>
+                                        {convertStatus && <p className={convertStatus.ok ? 'mf-dir-ok' : 'mf-search-error'}>{convertStatus.msg}</p>}
                                     </div>
 
                                     <div className="mf-setting-row mf-theme-row">

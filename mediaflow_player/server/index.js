@@ -3,7 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import YTMusic from 'ytmusic-api';
 import LiteYTMusic from 'lite-ytmusic-api';
-import { get_yt_audio, get_yt_stream, end_yt_stream, get_lyrics, set_lyrics, get_settings, set_settings, delete_library_item, clear_library } from './ytget.js';
+import { get_yt_audio, get_yt_stream, end_yt_stream, get_lyrics, set_lyrics, get_settings, set_settings, convert_all_library, delete_library_item, clear_library } from './ytget.js';
 
 const app = express();
 app.use(cors());
@@ -288,7 +288,7 @@ app.post('/api/lyrics/:videoId', async (req, res) => {
     }
 });
 
-// --- Feature 3: custom download location ---
+// --- Feature 3: custom download location + audio format ---
 app.get('/api/settings', async (req, res) => {
     try {
         res.json(await get_settings());
@@ -299,9 +299,18 @@ app.get('/api/settings', async (req, res) => {
 
 app.post('/api/settings', async (req, res) => {
     try {
-        res.json(await set_settings(req.body?.downloadDir));
+        res.json(await set_settings({ downloadDir: req.body?.downloadDir, audioFormat: req.body?.audioFormat }));
     } catch (err) {
         res.status(err.status || 500).json({ error: err.message || 'Could not update settings' });
+    }
+});
+
+// --- Converts every already-downloaded song to the currently configured format ---
+app.post('/api/library/convert-all', async (req, res) => {
+    try {
+        res.json(await convert_all_library());
+    } catch (err) {
+        res.status(err.status || 500).json({ error: err.message || 'Could not convert library' });
     }
 });
 
